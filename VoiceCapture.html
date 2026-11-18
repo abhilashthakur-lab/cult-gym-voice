@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#11111a">
+    <title>Cult Gym Academy | Voice Practice</title>
+    <style>
+      :root { color-scheme: dark; --bg:#11111a; --panel:#1b1b27; --line:rgba(255,255,255,.12); --text:#fff; --muted:rgba(255,255,255,.62); --pink:#e040a0; --purple:#8a2be2; }
+      * { box-sizing:border-box; }
+      body { min-height:100vh; margin:0; padding:20px; display:grid; place-items:center; background:radial-gradient(ellipse at 15% 10%,rgba(224,64,160,.18),transparent 42%),var(--bg); color:var(--text); font:15px Arial,sans-serif; }
+      .card { width:min(100%,440px); padding:22px; border:1px solid var(--line); border-radius:18px; background:var(--panel); box-shadow:0 20px 60px rgba(0,0,0,.4); }
+      h1 { margin:0 0 7px; font-size:1.25rem; }
+      p { color:var(--muted); line-height:1.55; }
+      label { display:block; margin:16px 0 7px; font-size:.82rem; font-weight:700; }
+      select,textarea,button { width:100%; font:inherit; }
+      select,textarea { padding:12px; color:#fff; border:1px solid var(--line); border-radius:10px; background:#242432; }
+      textarea { min-height:160px; resize:vertical; line-height:1.5; }
+      button { min-height:48px; margin-top:12px; padding:12px; border:0; border-radius:10px; color:#fff; background:linear-gradient(110deg,#c0309a,#8a2be2); font-weight:700; cursor:pointer; }
+      button:disabled { opacity:.5; cursor:not-allowed; }
+      button.listening { background:linear-gradient(110deg,#d94454,#aa2046); box-shadow:0 0 0 4px rgba(217,68,84,.16); }
+      button.secondary { border:1px solid var(--line); background:transparent; }
+      .status { min-height:42px; margin:12px 0 0; font-size:.78rem; }
+      .hint { margin-bottom:0; font-size:.72rem; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h1>Cult Gym Academy</h1>
+      <p>Press and hold <strong>Speak</strong> while you say your response. Release the button to finish, review the transcript, and send it back to the practice round.</p>
+
+      <label for="language">Recognition language</label>
+      <select id="language">
+        <option value="en-IN">English (India)</option>
+        <option value="hi-IN">Hindi</option>
+        <option value="mr-IN">Marathi</option>
+        <option value="kn-IN">Kannada</option>
+        <option value="te-IN">Telugu</option>
+        <option value="ta-IN">Tamil</option>
+        <option value="pa-IN">Punjabi</option>
+        <option value="bn-IN">Bengali</option>
+        <option value="gu-IN">Gujarati</option>
+      </select>
+
+      <button id="speakButton" type="button">Press and hold to speak</button>
+      <p class="status" id="status" role="status" aria-live="polite">Allow microphone access when your browser asks.</p>
+
+      <label for="transcript">Transcript</label>
+      <textarea id="transcript" placeholder="Your recognized words will appear here. You can correct them before sending."></textarea>
+      <button class="secondary" id="sendButton" type="button" disabled>Use this transcript</button>
+      <p class="hint">Speech recognition quality depends on your browser and the selected language. Use one language per recording for best results.</p>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const captureId = params.get('captureId') || '';
+      const openerOrigin = params.get('openerOrigin') || '';
+      const language = document.getElementById('language');
+      const transcriptField = document.getElementById('transcript');
+      const speakButton = document.getElementById('speakButton');
+      const sendButton = document.getElementById('sendButton');
+      const status = document.getElementById('status');
+      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+      let recognition = null;
+      let listening = false;
+      let stopRequested = false;
+      let finalTranscript = '';
+      let recognitionError = '';
+
+      const requestedLanguage = params.get('language') || 'en-IN';
+      if (Array.from(language.options).some(function (option) { return option.value === requestedLanguage; })) {
+        language.value = requestedLanguage;
+      }
+
+      function setStatus(message) {
+        status.textContent = message;
+      }
+
+      function startListening(event) {
+        if (event) {
+          event.preventDefault();
+          try { event.currentTarget.setPointerCapture(event.pointerId); } catch (ignore) {}
+        }
+        if (listening) return;
+
+        if (!SpeechRecognitionAPI) {
+          setStatus('Speech recognition is not supported in this browser. Try the latest Chrome browser or use device dictation.');
+          return;
+        }
+
+        finalTranscript = '';
+        recognitionError = '';
+        stopRequested = false;
+        transcriptField.value = '';
+        sendButton.disabled = true;
+        recognition = new SpeechRecognitionAPI();
+        recognition.lang = language.value;
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = function () {
+          listening = true;
+          speakButton.classList.add('listening');
+          speakButton.textContent = 'Listening… release to finish';
+          language.disabled = true;
+          setStatus('Listening in ' + language.options[language.selectedIndex].text + '. Release the button when finished.');
+        };
+
+        recognition.onresult = function (event) {
+          const finalParts = [];
+          const interimParts = [];
+          for (let i = 0; i < event.results.length; i++) {
+            const result = event.results[i];
+            const text = result[0] && result[0].transcript ? result[0].transcript.trim() : '';
+            if (!text) continue;
+            if (result.isFinal) finalParts.push(text);
+            else interimParts.push(text);
+          }
+          finalTranscript = finalParts.join(' ').trim();
+          transcriptField.value = [finalTranscript, interimParts.join(' ')].filter(Boolean).join(' ');
+        };
+
+        recognition.onerror = function (event) {
+          recognitionError = event.error || 'unknown';
+          if (recognitionError === 'not-allowed' || recognitionError === 'service-not-allowed') {
+            setStatus('Microphone access or speech recognition was blocked. Check this site’s microphone permission and browser settings.');
+          } else if (recognitionError === 'no-speech') {
+            setStatus('No speech was detected. Press and hold Speak and try again.');
+          } else if (recognitionError === 'language-not-supported') {
+            setStatus('This browser does not support that recognition language. Select another language and retry.');
+          } else {
+            setStatus('Speech recognition stopped (' + recognitionError + '). Try again.');
+          }
+        };
+
+        recognition.onend = function () {
+          listening = false;
+          speakButton.classList.remove('listening');
+          speakButton.textContent = 'Press and hold to speak';
+          language.disabled = false;
+          transcriptField.value = finalTranscript;
+          sendButton.disabled = !finalTranscript.trim();
+          if (!recognitionError) {
+            setStatus(finalTranscript
+              ? 'Transcript ready. Review it, then send it to the practice round.'
+              : 'No speech was captured. Press and hold Speak and try again.');
+          }
+          recognition = null;
+        };
+
+        try {
+          recognition.start();
+          listening = true;
+          speakButton.classList.add('listening');
+          speakButton.textContent = 'Listening… release to finish';
+          language.disabled = true;
+          setStatus('Starting microphone…');
+        } catch (error) {
+          listening = false;
+          recognition = null;
+          setStatus('Could not start speech recognition. Check microphone access and try again.');
+        }
+      }
+
+      function stopListening() {
+        if (!listening || stopRequested || !recognition) return;
+        stopRequested = true;
+        setStatus('Finishing transcript…');
+        try { recognition.stop(); } catch (ignore) {}
+      }
+
+      function sendTranscript() {
+        const text = transcriptField.value.trim();
+        if (!text) {
+          setStatus('There is no transcript to send yet.');
+          return;
+        }
+        const allowedParent = openerOrigin === 'https://script.google.com' ||
+          /^https:\/\/[a-z0-9-]+\.googleusercontent\.com$/i.test(openerOrigin);
+        if (!allowedParent || !window.opener || window.opener.closed) {
+          setStatus('The practice window is unavailable. Close this window and reopen voice input from the practice page.');
+          return;
+        }
+        window.opener.postMessage({
+          type: 'cult-gym-voice-transcript',
+          captureId: captureId,
+          transcript: text
+        }, openerOrigin);
+        setStatus('Transcript sent. You can close this window.');
+        window.setTimeout(function () { window.close(); }, 350);
+      }
+
+      speakButton.addEventListener('pointerdown', startListening);
+      speakButton.addEventListener('pointerup', stopListening);
+      speakButton.addEventListener('pointercancel', stopListening);
+      speakButton.addEventListener('lostpointercapture', stopListening);
+      sendButton.addEventListener('click', sendTranscript);
+    </script>
+  </body>
+</html>
