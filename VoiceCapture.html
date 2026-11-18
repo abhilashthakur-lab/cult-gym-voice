@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#11111a">
     <title>Cult Gym Academy | Voice Practice</title>
     <style>
-      :root { color-scheme: dark; --bg:#11111a; --panel:#1b1b27; --line:rgba(255,255,255,.12); --text:#fff; --muted:rgba(255,255,255,.62); --pink:#e040a0; --purple:#8a2be2; }
+      :root { color-scheme: dark; --bg:#11111a; --panel:#1b1b27; --line:rgba(255,255,255,.12); --text:#fff; --muted:rgba(255,255,255,.62); }
       * { box-sizing:border-box; }
       body { min-height:100vh; margin:0; padding:20px; display:grid; place-items:center; background:radial-gradient(ellipse at 15% 10%,rgba(224,64,160,.18),transparent 42%),var(--bg); color:var(--text); font:15px Arial,sans-serif; }
       .card { width:min(100%,440px); padding:22px; border:1px solid var(--line); border-radius:18px; background:var(--panel); box-shadow:0 20px 60px rgba(0,0,0,.4); }
@@ -16,10 +16,8 @@
       select,textarea,button { width:100%; font:inherit; }
       select,textarea { padding:12px; color:#fff; border:1px solid var(--line); border-radius:10px; background:#242432; }
       textarea { min-height:160px; resize:vertical; line-height:1.5; }
-      button { min-height:48px; margin-top:12px; padding:12px; border:0; border-radius:10px; color:#fff; background:linear-gradient(110deg,#c0309a,#8a2be2); font-weight:700; cursor:pointer; }
-      button:disabled { opacity:.5; cursor:not-allowed; }
+      button { min-height:48px; margin-top:12px; padding:12px; border:0; border-radius:10px; color:#fff; background:linear-gradient(110deg,#c0309a,#8a2be2); font-weight:700; cursor:pointer; touch-action:none; user-select:none; -webkit-user-select:none; }
       button.listening { background:linear-gradient(110deg,#d94454,#aa2046); box-shadow:0 0 0 4px rgba(217,68,84,.16); }
-      button.secondary { border:1px solid var(--line); background:transparent; }
       .status { min-height:42px; margin:12px 0 0; font-size:.78rem; }
       .hint { margin-bottom:0; font-size:.72rem; }
     </style>
@@ -27,7 +25,7 @@
   <body>
     <main class="card">
       <h1>Cult Gym Academy</h1>
-      <p>Press and hold <strong>Speak</strong> while you say your response. Release the button to finish, review the transcript, and send it back to the practice round.</p>
+      <p>Press and hold <strong>Speak</strong> while you say your response. Release the button to finish. The transcript will return to the practice round automatically.</p>
 
       <label for="language">Recognition language</label>
       <select id="language">
@@ -46,9 +44,8 @@
       <p class="status" id="status" role="status" aria-live="polite">Allow microphone access when your browser asks.</p>
 
       <label for="transcript">Transcript</label>
-      <textarea id="transcript" placeholder="Your recognized words will appear here. You can correct them before sending."></textarea>
-      <button class="secondary" id="sendButton" type="button" disabled>Use this transcript</button>
-      <p class="hint">Speech recognition quality depends on your browser and the selected language. Use one language per recording for best results.</p>
+      <textarea id="transcript" placeholder="Your recognized words will appear here before they return to the practice round." readonly></textarea>
+      <p class="hint">Speech recognition quality depends on your browser and selected language. Review and edit the transcript in the practice page.</p>
     </main>
 
     <script>
@@ -58,9 +55,9 @@
       const language = document.getElementById('language');
       const transcriptField = document.getElementById('transcript');
       const speakButton = document.getElementById('speakButton');
-      const sendButton = document.getElementById('sendButton');
       const status = document.getElementById('status');
       const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+
       let recognition = null;
       let listening = false;
       let stopRequested = false;
@@ -68,7 +65,9 @@
       let recognitionError = '';
 
       const requestedLanguage = params.get('language') || 'en-IN';
-      if (Array.from(language.options).some(function (option) { return option.value === requestedLanguage; })) {
+      if (Array.from(language.options).some(function (option) {
+        return option.value === requestedLanguage;
+      })) {
         language.value = requestedLanguage;
       }
 
@@ -79,12 +78,15 @@
       function startListening(event) {
         if (event) {
           event.preventDefault();
-          try { event.currentTarget.setPointerCapture(event.pointerId); } catch (ignore) {}
+          try {
+            event.currentTarget.setPointerCapture(event.pointerId);
+          } catch (ignore) {}
         }
+
         if (listening) return;
 
         if (!SpeechRecognitionAPI) {
-          setStatus('Speech recognition is not supported in this browser. Try the latest Chrome browser or use device dictation.');
+          setStatus('Speech recognition is not supported in this browser. Try Chrome or use device dictation.');
           return;
         }
 
@@ -92,7 +94,7 @@
         recognitionError = '';
         stopRequested = false;
         transcriptField.value = '';
-        sendButton.disabled = true;
+
         recognition = new SpeechRecognitionAPI();
         recognition.lang = language.value;
         recognition.continuous = true;
@@ -104,31 +106,42 @@
           speakButton.classList.add('listening');
           speakButton.textContent = 'Listening… release to finish';
           language.disabled = true;
-          setStatus('Listening in ' + language.options[language.selectedIndex].text + '. Release the button when finished.');
+          setStatus('Listening in ' + language.options[language.selectedIndex].text + '. Release when finished.');
         };
 
         recognition.onresult = function (event) {
           const finalParts = [];
           const interimParts = [];
+
           for (let i = 0; i < event.results.length; i++) {
             const result = event.results[i];
-            const text = result[0] && result[0].transcript ? result[0].transcript.trim() : '';
+            const text = result[0] && result[0].transcript
+              ? result[0].transcript.trim()
+              : '';
+
             if (!text) continue;
-            if (result.isFinal) finalParts.push(text);
-            else interimParts.push(text);
+            if (result.isFinal) {
+              finalParts.push(text);
+            } else {
+              interimParts.push(text);
+            }
           }
+
           finalTranscript = finalParts.join(' ').trim();
-          transcriptField.value = [finalTranscript, interimParts.join(' ')].filter(Boolean).join(' ');
+          transcriptField.value = [finalTranscript, interimParts.join(' ')]
+            .filter(Boolean)
+            .join(' ');
         };
 
         recognition.onerror = function (event) {
           recognitionError = event.error || 'unknown';
+
           if (recognitionError === 'not-allowed' || recognitionError === 'service-not-allowed') {
-            setStatus('Microphone access or speech recognition was blocked. Check this site’s microphone permission and browser settings.');
+            setStatus('Microphone access or speech recognition was blocked. Check this site’s microphone permission.');
           } else if (recognitionError === 'no-speech') {
             setStatus('No speech was detected. Press and hold Speak and try again.');
           } else if (recognitionError === 'language-not-supported') {
-            setStatus('This browser does not support that recognition language. Select another language and retry.');
+            setStatus('This browser does not support that language. Select another and retry.');
           } else {
             setStatus('Speech recognition stopped (' + recognitionError + '). Try again.');
           }
@@ -140,12 +153,14 @@
           speakButton.textContent = 'Press and hold to speak';
           language.disabled = false;
           transcriptField.value = finalTranscript;
-          sendButton.disabled = !finalTranscript.trim();
-          if (!recognitionError) {
-            setStatus(finalTranscript
-              ? 'Transcript ready. Review it, then send it to the practice round.'
-              : 'No speech was captured. Press and hold Speak and try again.');
+
+          if (finalTranscript.trim()) {
+            setStatus('Returning transcript to the practice round…');
+            window.setTimeout(sendTranscript, 250);
+          } else if (!recognitionError) {
+            setStatus('No speech was captured. Press and hold Speak and try again.');
           }
+
           recognition = null;
         };
 
@@ -165,37 +180,48 @@
 
       function stopListening() {
         if (!listening || stopRequested || !recognition) return;
+
         stopRequested = true;
         setStatus('Finishing transcript…');
-        try { recognition.stop(); } catch (ignore) {}
+
+        try {
+          recognition.stop();
+        } catch (ignore) {}
       }
 
       function sendTranscript() {
         const text = transcriptField.value.trim();
+
         if (!text) {
           setStatus('There is no transcript to send yet.');
           return;
         }
-        const allowedParent = openerOrigin === 'https://script.google.com' ||
+
+        const allowedParent =
+          openerOrigin === 'https://script.google.com' ||
           /^https:\/\/[a-z0-9-]+\.googleusercontent\.com$/i.test(openerOrigin);
+
         if (!allowedParent || !window.opener || window.opener.closed) {
-          setStatus('The practice window is unavailable. Close this window and reopen voice input from the practice page.');
+          setStatus('The practice page is unavailable. Reopen voice input from the practice page.');
           return;
         }
+
         window.opener.postMessage({
           type: 'cult-gym-voice-transcript',
           captureId: captureId,
           transcript: text
         }, openerOrigin);
-        setStatus('Transcript sent. You can close this window.');
-        window.setTimeout(function () { window.close(); }, 350);
+
+        setStatus('Transcript sent. Closing microphone window…');
+        window.setTimeout(function () {
+          window.close();
+        }, 400);
       }
 
       speakButton.addEventListener('pointerdown', startListening);
       speakButton.addEventListener('pointerup', stopListening);
       speakButton.addEventListener('pointercancel', stopListening);
       speakButton.addEventListener('lostpointercapture', stopListening);
-      sendButton.addEventListener('click', sendTranscript);
     </script>
   </body>
 </html>
